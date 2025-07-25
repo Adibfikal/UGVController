@@ -302,8 +302,8 @@ void loop() {
       
       // Apply differential steering
       float steering_factor = Ch1 * 0.5; // Reduce steering sensitivity
-      desired_pwm_A = constrain(base_speed - steering_factor, 0, max_speed);
-      desired_pwm_B = constrain(base_speed + steering_factor, 0, max_speed);
+      desired_pwm_A = constrain(base_speed + steering_factor, 0, max_speed);
+      desired_pwm_B = constrain(base_speed - steering_factor, 0, max_speed);
       
       // Direction based on CH2
       if (Ch2 >= 0) {
