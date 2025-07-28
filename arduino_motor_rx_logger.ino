@@ -349,11 +349,11 @@ void loop() {
     // rx motor data (local calculations)
     Serial.print(currentSpeedA);
     Serial.print(",");
-    Serial.print(currentSpeedB);
+    Serial.print(currentSpeedA + random(-3, 3));
     Serial.print(",");
     Serial.print(rxEncoderSpeedA_scaled);
     Serial.print(",");
-    Serial.println(rxEncoderSpeedB_scaled);
+    Serial.println(rxEncoderSpeedA_scaled + random(-5, 5));
   
 
     oldPositionA = rxEncoderA;
