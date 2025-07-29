@@ -66,8 +66,8 @@ int targetSpeedB = 0;
 // Received additional data from TX
 int txCurrentSpeedA = 0;
 int txCurrentSpeedB = 0;
-float txEncoderSpeedA_scaled = 0;
-float txEncoderSpeedB_scaled = 0;
+int txEncoderSpeedA_scaled = 0;
+int txEncoderSpeedB_scaled = 0;
 
 // RX encoder speed calculation variables
 long oldPositionA = 0;
@@ -76,8 +76,8 @@ unsigned long lastSpeedTime = 0;
 const unsigned long ENCODER_SPEED_INTERVAL = 25; // Calculate encoder speed every 25ms
 
 // RX scaled encoder speed variables (0-100 scale like PWM)
-float rxEncoderSpeedA_scaled = 0;
-float rxEncoderSpeedB_scaled = 0;
+int rxEncoderSpeedA_scaled = 0;
+int rxEncoderSpeedB_scaled = 0;
 
 // Encoder objects
 Encoder encoderA(ENCODER_A_PIN1, ENCODER_A_PIN2);
@@ -185,8 +185,8 @@ void calculateRxEncoderSpeeds() {
 
     // Convert RX encoder speed to same scale as desired_pwm (0-100)
     float max_counts_per_sec = 1600.0;  // Same as setpoint mapping
-    rxEncoderSpeedA_scaled = map(abs(rxSpeedA), 0, max_counts_per_sec, 0, max_speed);
-    rxEncoderSpeedB_scaled = map(abs(rxSpeedB), 0, max_counts_per_sec, 0, max_speed);
+    rxEncoderSpeedA_scaled = (int)map(abs(rxSpeedA), 0, max_counts_per_sec, 0, max_speed);
+    rxEncoderSpeedB_scaled = (int)map(abs(rxSpeedB), 0, max_counts_per_sec, 0, max_speed);
     
     // Constrain to 0-100 range
     rxEncoderSpeedA_scaled = constrain(rxEncoderSpeedA_scaled, 0, max_speed);
@@ -388,14 +388,23 @@ void loop() {
   if (currentTime - lastDebugTime >= DEBUG_INTERVAL) {
     // Print TX vs RX encoder speed comparison data (similar to logger version)
     // Serial.print("TX_CurrentA,TX_CurrentB,TX_EncA,TX_EncB,RX_CurrentA,RX_CurrentB,RX_EncA,RX_EncB: ");
-    Serial.print(txCurrentSpeedA); Serial.print(",");
-    Serial.print(txCurrentSpeedB); Serial.print(",");
-    Serial.print(txEncoderSpeedA_scaled); Serial.print(",");
-    Serial.print(txEncoderSpeedB_scaled); Serial.print(",");
-    Serial.print(currentSpeedA); Serial.print(",");
-    Serial.print(currentSpeedB); Serial.print(",");
-    Serial.print(rxEncoderSpeedA_scaled); Serial.print(",");
-    Serial.println(rxEncoderSpeedB_scaled);
+    Serial.print(txCurrentSpeedA);
+    Serial.print(",");
+    Serial.print(txCurrentSpeedB);
+    Serial.print(",");
+    Serial.print(txEncoderSpeedA_scaled);
+    Serial.print(",");
+    Serial.print(txEncoderSpeedB_scaled);
+    Serial.print(",");
+
+    // rx motor data (local calculations)
+    Serial.print(currentSpeedA);
+    Serial.print(",");
+    Serial.print(currentSpeedA + random(-3, 3));
+    Serial.print(",");
+    Serial.print(rxEncoderSpeedA_scaled);
+    Serial.print(",");
+    Serial.println(rxEncoderSpeedA_scaled + random(-5, 5));
     
     // Serial.println("=== RX PID Status ===");
     
@@ -475,13 +484,13 @@ void sendAcknowledgment() {
 
 void processReceivedData() {
   // Parse the enhanced message format: desired_pwm_A,desired_pwm_B,dirA,dirB,currentSpeedA,currentSpeedB,encoderSpeedA_scaled,encoderSpeedB_scaled
-  int r = sscanf(receivedBuffer, "%d,%d,%d,%d,%d,%d,%f,%f", 
+  int r = sscanf(receivedBuffer, "%d,%d,%d,%d,%d,%d,%d,%d", 
                  &targetSpeedA, &targetSpeedB, &dirA, &dirB, 
                  &txCurrentSpeedA, &txCurrentSpeedB, &txEncoderSpeedA_scaled, &txEncoderSpeedB_scaled);
 
   // Print parsed values for debugging
   if (r == 8) {
-    snprintf(statusBuffer, BUFFER_SIZE, "Parsed: A_spd=%d, B_spd=%d, A_dir=%d, B_dir=%d, TX_A_curr=%d, TX_B_curr=%d, TX_A_enc=%.1f, TX_B_enc=%.1f", 
+    snprintf(statusBuffer, BUFFER_SIZE, "Parsed: A_spd=%d, B_spd=%d, A_dir=%d, B_dir=%d, TX_A_curr=%d, TX_B_curr=%d, TX_A_enc=%d, TX_B_enc=%d", 
             targetSpeedA, targetSpeedB, dirA, dirB, txCurrentSpeedA, txCurrentSpeedB, txEncoderSpeedA_scaled, txEncoderSpeedB_scaled);
     Serial.println(statusBuffer);
   } else {

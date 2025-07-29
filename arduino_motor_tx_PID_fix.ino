@@ -63,8 +63,8 @@ unsigned long lastSpeedTime = 0;
 const unsigned long ENCODER_SPEED_INTERVAL = 25; // Calculate encoder speed every 25ms
 
 // Scaled encoder speed variables (0-100 scale like PWM)
-float encoderSpeedA_scaled = 0;
-float encoderSpeedB_scaled = 0;
+int encoderSpeedA_scaled = 0;
+int encoderSpeedB_scaled = 0;
 
 // Current motor speed variables for transmission
 int currentSpeedA = 0;
@@ -203,8 +203,8 @@ void calculateEncoderSpeeds() {
 
     // Convert encoder speed to same scale as desired_pwm (0-100)
     float max_counts_per_sec = 1600.0;  // Same as setpoint mapping
-    encoderSpeedA_scaled = map(abs(encoderSpeedA_raw), 0, max_counts_per_sec, 0, max_speed);
-    encoderSpeedB_scaled = map(abs(encoderSpeedB_raw), 0, max_counts_per_sec, 0, max_speed);
+    encoderSpeedA_scaled = (int)map(abs(encoderSpeedA_raw), 0, max_counts_per_sec, 0, max_speed);
+    encoderSpeedB_scaled = (int)map(abs(encoderSpeedB_raw), 0, max_counts_per_sec, 0, max_speed);
     
     // Constrain to 0-100 range
     encoderSpeedA_scaled = constrain(encoderSpeedA_scaled, 0, max_speed);
@@ -523,7 +523,7 @@ void loop() {
 
 void sendMessage(int a_spd, int b_spd, int a_dir, int b_dir) {
   // Enhanced message format: desired_pwm_A,desired_pwm_B,dirA,dirB,currentSpeedA,currentSpeedB,encoderSpeedA_scaled,encoderSpeedB_scaled
-  snprintf(messageBuffer, BUFFER_SIZE, "%d,%d,%d,%d,%d,%d,%.1f,%.1f", 
+  snprintf(messageBuffer, BUFFER_SIZE, "%d,%d,%d,%d,%d,%d,%d,%d", 
            a_spd, b_spd, a_dir, b_dir, currentSpeedA, currentSpeedB, encoderSpeedA_scaled, encoderSpeedB_scaled);
   
   // Send via Serial2
