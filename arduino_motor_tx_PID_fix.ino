@@ -100,8 +100,6 @@ int Ch5 = 0;
 bool Ch6 = 0;
 
 // Motor control variables (PWM outputs)
-int currentSpeedA = 0;
-int currentSpeedB = 0;
 int dirA = 1;
 int dirB = 1;
 
