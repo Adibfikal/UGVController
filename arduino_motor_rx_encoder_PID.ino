@@ -63,6 +63,22 @@ int dirB = 1;
 int targetSpeedA = 0;
 int targetSpeedB = 0;
 
+// Received additional data from TX
+int txCurrentSpeedA = 0;
+int txCurrentSpeedB = 0;
+float txEncoderSpeedA_scaled = 0;
+float txEncoderSpeedB_scaled = 0;
+
+// RX encoder speed calculation variables
+long oldPositionA = 0;
+long oldPositionB = 0;
+unsigned long lastSpeedTime = 0;
+const unsigned long ENCODER_SPEED_INTERVAL = 25; // Calculate encoder speed every 25ms
+
+// RX scaled encoder speed variables (0-100 scale like PWM)
+float rxEncoderSpeedA_scaled = 0;
+float rxEncoderSpeedB_scaled = 0;
+
 // Encoder objects
 Encoder encoderA(ENCODER_A_PIN1, ENCODER_A_PIN2);
 Encoder encoderB(ENCODER_B_PIN1, ENCODER_B_PIN2);
@@ -156,6 +172,32 @@ void calculateSpeeds() {
   }
 }
 
+// Calculate RX encoder speeds for comparison
+void calculateRxEncoderSpeeds() {
+  unsigned long currentTime = millis();
+  if (currentTime - lastSpeedTime >= ENCODER_SPEED_INTERVAL) {
+    long rxEncoderA = encoderA.read();
+    long rxEncoderB = encoderB.read();
+
+    // Calculate encoder speeds
+    double rxSpeedA = (double)(rxEncoderA - oldPositionA) * 1000.0 / (currentTime - lastSpeedTime);
+    double rxSpeedB = (double)(rxEncoderB - oldPositionB) * 1000.0 / (currentTime - lastSpeedTime);
+
+    // Convert RX encoder speed to same scale as desired_pwm (0-100)
+    float max_counts_per_sec = 1600.0;  // Same as setpoint mapping
+    rxEncoderSpeedA_scaled = map(abs(rxSpeedA), 0, max_counts_per_sec, 0, max_speed);
+    rxEncoderSpeedB_scaled = map(abs(rxSpeedB), 0, max_counts_per_sec, 0, max_speed);
+    
+    // Constrain to 0-100 range
+    rxEncoderSpeedA_scaled = constrain(rxEncoderSpeedA_scaled, 0, max_speed);
+    rxEncoderSpeedB_scaled = constrain(rxEncoderSpeedB_scaled, 0, max_speed);
+
+    oldPositionA = rxEncoderA;
+    oldPositionB = rxEncoderB;
+    lastSpeedTime = currentTime;
+  }
+}
+
 void handleSerialCommands() {
   if (Serial.available()) {
     String command = Serial.readString();
@@ -213,12 +255,17 @@ void setup() {
   prevPositionA = encoderA.read();
   prevPositionB = encoderB.read();
 
-  Serial.println("Slave with PID Controller Ready");
-  Serial.println("Waiting for commands from master:");
-  Serial.println("- Normal mode: Both motors same direction (forward/backward)");
-  Serial.println("- Spinning mode: Motors opposite directions for in-place turns");
-  Serial.println("Send commands: KP_A=value, KI_A=value, KD_A=value, etc.");
-  Serial.println("Send 'SHOW' to display current PID values");
+  // Initialize RX encoder speed calculation variables
+  lastSpeedTime = millis();
+  oldPositionA = encoderA.read();
+  oldPositionB = encoderB.read();
+
+  // Serial.println("Slave with PID Controller Ready");
+  // Serial.println("Waiting for commands from master:");
+  // Serial.println("- Normal mode: Both motors same direction (forward/backward)");
+  // Serial.println("- Spinning mode: Motors opposite directions for in-place turns");
+  // Serial.println("Send commands: KP_A=value, KI_A=value, KD_A=value, etc.");
+  // Serial.println("Send 'SHOW' to display current PID values");
 }
 
 void loop() {
@@ -229,6 +276,9 @@ void loop() {
   
   // Calculate current motor speeds from encoders
   calculateSpeeds();
+  
+  // Calculate RX encoder speeds for comparison
+  calculateRxEncoderSpeeds();
   
   // Jika ada data yang diterima, proses data tersebut
   if (Serial2.available()) {
@@ -336,34 +386,45 @@ void loop() {
   const unsigned long DEBUG_INTERVAL = 100; // Print debug every 100ms
   
   if (currentTime - lastDebugTime >= DEBUG_INTERVAL) {
-    Serial.println("=== RX PID Status ===");
+    // Print TX vs RX encoder speed comparison data (similar to logger version)
+    // Serial.print("TX_CurrentA,TX_CurrentB,TX_EncA,TX_EncB,RX_CurrentA,RX_CurrentB,RX_EncA,RX_EncB: ");
+    Serial.print(txCurrentSpeedA); Serial.print(",");
+    Serial.print(txCurrentSpeedB); Serial.print(",");
+    Serial.print(txEncoderSpeedA_scaled); Serial.print(",");
+    Serial.print(txEncoderSpeedB_scaled); Serial.print(",");
+    Serial.print(currentSpeedA); Serial.print(",");
+    Serial.print(currentSpeedB); Serial.print(",");
+    Serial.print(rxEncoderSpeedA_scaled); Serial.print(",");
+    Serial.println(rxEncoderSpeedB_scaled);
+    
+    // Serial.println("=== RX PID Status ===");
     
     // Determine movement mode based on directions
-    if (dirA != dirB) {
-      Serial.print("SPINNING MODE - Direction: ");
-      Serial.println(dirA == 1 ? "RIGHT (A fwd, B rev)" : "LEFT (A rev, B fwd)");
-    } else {
-      Serial.print("MOVEMENT MODE - Direction: ");
-      Serial.println(dirA == 1 ? "FORWARD" : "BACKWARD");
-    }
+    // if (dirA != dirB) {
+    //   Serial.print("SPINNING MODE - Direction: ");
+    //   Serial.println(dirA == 1 ? "RIGHT (A fwd, B rev)" : "LEFT (A rev, B fwd)");
+    // } else {
+    //   Serial.print("MOVEMENT MODE - Direction: ");
+    //   Serial.println(dirA == 1 ? "FORWARD" : "BACKWARD");
+    // }
     
     // Debug: Print raw encoder counts
-    Serial.print("Raw Encoder Counts - A: "); Serial.print(encoderA.read());
-    Serial.print(" B: "); Serial.println(encoderB.read());
+    // Serial.print("Raw Encoder Counts - A: "); Serial.print(encoderA.read());
+    // Serial.print(" B: "); Serial.println(encoderB.read());
     
-    Serial.print("A: Target PWM="); Serial.print(targetSpeedA);
-    Serial.print(" Setpoint="); Serial.print(setpoint_A);
-    Serial.print(" Feedback="); Serial.print(feedback_A);
-    Serial.print(" Error="); Serial.print(error_A);
-    Serial.print(" PWM="); Serial.print(currentSpeedA); Serial.print("/"); Serial.print(max_speed);
-    Serial.print(" Dir="); Serial.println(dirA);
+    // Serial.print("A: Target PWM="); Serial.print(targetSpeedA);
+    // Serial.print(" Setpoint="); Serial.print(setpoint_A);
+    // Serial.print(" Feedback="); Serial.print(feedback_A);
+    // Serial.print(" Error="); Serial.print(error_A);
+    // Serial.print(" PWM="); Serial.print(currentSpeedA); Serial.print("/"); Serial.print(max_speed);
+    // Serial.print(" Dir="); Serial.println(dirA);
     
-    Serial.print("B: Target PWM="); Serial.print(targetSpeedB);
-    Serial.print(" Setpoint="); Serial.print(setpoint_B);
-    Serial.print(" Feedback="); Serial.print(feedback_B);
-    Serial.print(" Error="); Serial.print(error_B);
-    Serial.print(" PWM="); Serial.print(currentSpeedB); Serial.print("/"); Serial.print(max_speed);
-    Serial.print(" Dir="); Serial.println(dirB);
+    // Serial.print("B: Target PWM="); Serial.print(targetSpeedB);
+    // Serial.print(" Setpoint="); Serial.print(setpoint_B);
+    // Serial.print(" Feedback="); Serial.print(feedback_B);
+    // Serial.print(" Error="); Serial.print(error_B);
+    // Serial.print(" PWM="); Serial.print(currentSpeedB); Serial.print("/"); Serial.print(max_speed);
+    // Serial.print(" Dir="); Serial.println(dirB);
 
     lastDebugTime = currentTime;
   }
@@ -413,16 +474,28 @@ void sendAcknowledgment() {
 }
 
 void processReceivedData() {
-  // Parse the received data
-  int r = sscanf(receivedBuffer, "%d,%d,%d,%d", &targetSpeedA, &targetSpeedB, &dirA, &dirB);
+  // Parse the enhanced message format: desired_pwm_A,desired_pwm_B,dirA,dirB,currentSpeedA,currentSpeedB,encoderSpeedA_scaled,encoderSpeedB_scaled
+  int r = sscanf(receivedBuffer, "%d,%d,%d,%d,%d,%d,%f,%f", 
+                 &targetSpeedA, &targetSpeedB, &dirA, &dirB, 
+                 &txCurrentSpeedA, &txCurrentSpeedB, &txEncoderSpeedA_scaled, &txEncoderSpeedB_scaled);
 
   // Print parsed values for debugging
-  if (r == 4) {
-    snprintf(statusBuffer, BUFFER_SIZE, "Parsed: A_spd=%d, B_spd=%d, A_dir=%d, B_dir=%d", 
-            targetSpeedA, targetSpeedB, dirA, dirB);
+  if (r == 8) {
+    snprintf(statusBuffer, BUFFER_SIZE, "Parsed: A_spd=%d, B_spd=%d, A_dir=%d, B_dir=%d, TX_A_curr=%d, TX_B_curr=%d, TX_A_enc=%.1f, TX_B_enc=%.1f", 
+            targetSpeedA, targetSpeedB, dirA, dirB, txCurrentSpeedA, txCurrentSpeedB, txEncoderSpeedA_scaled, txEncoderSpeedB_scaled);
     Serial.println(statusBuffer);
   } else {
     snprintf(statusBuffer, BUFFER_SIZE, "Error parsing data. Items parsed: %d", r);
     Serial.println(statusBuffer);
+    
+    // If parsing failed, reset to safe values
+    targetSpeedA = 0;
+    targetSpeedB = 0;
+    dirA = 1;
+    dirB = 1;
+    txCurrentSpeedA = 0;
+    txCurrentSpeedB = 0;
+    txEncoderSpeedA_scaled = 0;
+    txEncoderSpeedB_scaled = 0;
   }
 }

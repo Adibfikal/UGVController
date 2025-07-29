@@ -56,6 +56,20 @@ float prev_derivative_B = 0;
 int prevSpeedA = 0;
 int prevSpeedB = 0;
 
+// Encoder speed calculation variables
+long oldPositionA = 0;
+long oldPositionB = 0;
+unsigned long lastSpeedTime = 0;
+const unsigned long ENCODER_SPEED_INTERVAL = 25; // Calculate encoder speed every 25ms
+
+// Scaled encoder speed variables (0-100 scale like PWM)
+float encoderSpeedA_scaled = 0;
+float encoderSpeedB_scaled = 0;
+
+// Current motor speed variables for transmission
+int currentSpeedA = 0;
+int currentSpeedB = 0;
+
 // Encoder objects
 Encoder encoderA(ENCODER_A_PIN1, ENCODER_A_PIN2);
 Encoder encoderB(ENCODER_B_PIN1, ENCODER_B_PIN2);
@@ -178,6 +192,32 @@ void calculateSpeeds() {
   }
 }
 
+// Calculate encoder speeds for transmission (similar to logger version)
+void calculateEncoderSpeeds() {
+  unsigned long currentTime = millis();
+  if (currentTime - lastSpeedTime >= ENCODER_SPEED_INTERVAL) {
+    long newPositionA = encoderA.read();
+    long newPositionB = encoderB.read();
+
+    // Speed in counts per second
+    double encoderSpeedA_raw = (double)(newPositionA - oldPositionA) * 1000.0 / (currentTime - lastSpeedTime);
+    double encoderSpeedB_raw = (double)(newPositionB - oldPositionB) * 1000.0 / (currentTime - lastSpeedTime);
+
+    // Convert encoder speed to same scale as desired_pwm (0-100)
+    float max_counts_per_sec = 1600.0;  // Same as setpoint mapping
+    encoderSpeedA_scaled = map(abs(encoderSpeedA_raw), 0, max_counts_per_sec, 0, max_speed);
+    encoderSpeedB_scaled = map(abs(encoderSpeedB_raw), 0, max_counts_per_sec, 0, max_speed);
+    
+    // Constrain to 0-100 range
+    encoderSpeedA_scaled = constrain(encoderSpeedA_scaled, 0, max_speed);
+    encoderSpeedB_scaled = constrain(encoderSpeedB_scaled, 0, max_speed);
+
+    oldPositionA = newPositionA;
+    oldPositionB = newPositionB;
+    lastSpeedTime = currentTime;
+  }
+}
+
 void handleSerialCommands() {
   if (Serial.available()) {
     String command = Serial.readString();
@@ -235,6 +275,11 @@ void setup() {
   prevPositionA = encoderA.read();
   prevPositionB = encoderB.read();
 
+  // Initialize encoder speed calculation variables
+  lastSpeedTime = millis();
+  oldPositionA = encoderA.read();
+  oldPositionB = encoderB.read();
+
   // kp_B = convert_pid_params(kp_B, MOTOR_UPDATE_INTERVAL);
   // ki_B = convert_pid_params(ki_B, MOTOR_UPDATE_INTERVAL);
   // kd_B = convert_pid_params(kd_B, MOTOR_UPDATE_INTERVAL);
@@ -252,6 +297,9 @@ void loop() {
   
   // Calculate current motor speeds from encoders
   calculateSpeeds();
+  
+  // Calculate encoder speeds for transmission
+  calculateEncoderSpeeds();
   
   // checkForResponse();
   
@@ -424,7 +472,7 @@ void loop() {
   }
 
   if (currentTime - lastSendTime >= SEND_INTERVAL) {
-    sendMessage(desired_pwm_A, currentSpeedB, dirA, dirB);
+    sendMessage(desired_pwm_A, desired_pwm_B, dirA, dirB);
     lastSendTime = currentTime;
 
     Serial.print(" Ch1 = "); Serial.print(Ch1);
@@ -476,15 +524,22 @@ void loop() {
 }
 
 void sendMessage(int a_spd, int b_spd, int a_dir, int b_dir) {
-  // Create message using C string functions
-  snprintf(messageBuffer, BUFFER_SIZE, "%d,%d,%d,%d", a_spd, b_spd, a_dir, b_dir);
+  // Enhanced message format: desired_pwm_A,desired_pwm_B,dirA,dirB,currentSpeedA,currentSpeedB,encoderSpeedA_scaled,encoderSpeedB_scaled
+  snprintf(messageBuffer, BUFFER_SIZE, "%d,%d,%d,%d,%d,%d,%.1f,%.1f", 
+           a_spd, b_spd, a_dir, b_dir, currentSpeedA, currentSpeedB, encoderSpeedA_scaled, encoderSpeedB_scaled);
   
   // Send via Serial2
   Serial2.println(messageBuffer);
   
-  // Print status to Serial monitor
+  // Print status to Serial monitor with encoder data
   snprintf(statusBuffer, BUFFER_SIZE, "SENT: %s", messageBuffer);
   Serial.println(statusBuffer);
+  
+  // Print TX encoder data for monitoring
+  Serial.print("TX Encoder Speeds - A: "); Serial.print(encoderSpeedA_scaled);
+  Serial.print(" B: "); Serial.print(encoderSpeedB_scaled);
+  Serial.print(" | TX Current Speeds - A: "); Serial.print(currentSpeedA);
+  Serial.print(" B: "); Serial.println(currentSpeedB);
 }
 
 void checkForResponse() {
